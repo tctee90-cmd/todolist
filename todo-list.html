@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>My Tasks</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script>
+    // Suppress Babel in-browser transformer warning
+    const _warn = console.warn.bind(console);
+    console.warn = (...args) => { if (typeof args[0] === 'string' && args[0].includes('Babel')) return; _warn(...args); };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; background: #0B0E18; }
+    body { font-family: 'Inter', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+    input, textarea, select, button { font-family: 'Inter', system-ui, sans-serif; font-size: 16px; touch-action: manipulation; -webkit-appearance: none; }
+    input[type="date"] { color-scheme: dark; }
+    input::placeholder, textarea::placeholder { color: #334155; }
+    textarea { scrollbar-width: none; resize: none; }
+    textarea::-webkit-scrollbar { display: none; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const todayDate = new Date();
+todayDate.setHours(0,0,0,0);
+const fmt = (dt) => dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+const TODAY_STR = fmt(todayDate);
+const offsetDate = (n) => { const x=new Date(todayDate); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
+
+function parseDue(str){if(!str)return null;const[y,m,d]=str.split("-").map(Number);return new Date(y,m-1,d);}
+function daysUntil(str){if(!str)return null;return Math.floor((parseDue(str)-todayDate)/86400000);}
+function dueStatus(item){
+  if(!item.dueDate||item.done)return null;
+  const d=daysUntil(item.dueDate);
+  if(d<0)return"overdue";if(d===0)return"today";if(d<=2)return"soon";return"ok";
+}
+function dueLabel(str){
+  const d=daysUntil(str);if(d===null)return"";
+  if(d<0)return`${Math.abs(d)}d overdue`;if(d===0)return"Due today";if(d===1)return"Due tomorrow";
+  return`Due in ${d}d`;
+}
+function dueBadge(status){
+  const R={bg:"rgba(239,68,68,0.1)",border:"#EF444455",text:"#EF4444"};
+  const A={bg:"rgba(245,158,11,0.12)",border:"#F59E0B55",text:"#F59E0B"};
+  const G={bg:"rgba(16,185,129,0.12)",border:"#10B98155",text:"#10B981"};
+  if(status==="overdue"||status==="today")return R;if(status==="soon")return A;return G;
+}
+
+const DEFAULT_SUBCATS={
+  work:["General","Meetings","Projects","Admin","Finance"],
+  personal:["General","Health","Home","Shopping","Learning"],
+};
+
+const CATS={
+  work:{
+    label:"Work",
+    icon:<svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.7"/><path d="M6 6V5a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>,
+    color:"#6366F1",dim:"rgba(99,102,241,0.15)",glow:"rgba(99,102,241,0.3)",
+    grad:"linear-gradient(135deg,#6366F1,#8B5CF6)",
+  },
+  personal:{
+    label:"Personal",
+    icon:<svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 2a4 4 0 100 8 4 4 0 000-8zM4 16a6 6 0 0112 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>,
+    color:"#F59E0B",dim:"rgba(245,158,11,0.15)",glow:"rgba(245,158,11,0.3)",
+    grad:"linear-gradient(135deg,#F59E0B,#EF4444)",
+  },
+};
+const TAB_KEYS=Object.keys(CATS);
+
+const SAMPLE_ITEMS=[
+  {id:1,title:"Q3 report review",note:"Check figures with finance team\nbefore sending.",done:false,created:TODAY_STR,category:"work",subcat:"Finance",dueDate:offsetDate(1)},
+  {id:2,title:"Team standup prep",note:"Prepare blockers and progress update.",done:false,created:TODAY_STR,category:"work",subcat:"Meetings",dueDate:""},
+  {id:3,title:"Reply to client email",note:"Follow up on the proposal Alex sent Monday.",done:true,created:fmt(new Date(todayDate-86400000)),category:"work",subcat:"Admin",dueDate:""},
+  {id:4,title:"Buy groceries",note:"Milk, eggs, bread\nCoffee beans.",done:false,created:TODAY_STR,category:"personal",subcat:"Shopping",dueDate:offsetDate(0)},
+  {id:5,title:"Read chapter 4",note:"Continue 'Deep Work' — shutdown ritual section.",done:false,created:TODAY_STR,category:"personal",subcat:"Learning",dueDate:offsetDate(5)},
+  {id:6,title:"Book dentist appointment",note:"",done:true,created:fmt(new Date(todayDate-6*86400000)),category:"personal",subcat:"Health",dueDate:""},
+];
+
+const C={bg:"#0B0E18",card:"#131729",cardHover:"#171C30",border:"#1E2540",green:"#10B981",amber:"#F59E0B",red:"#EF4444",text:"#E2E8F0",muted:"#64748B",subtle:"#94A3B8"};
+const ff="'Inter', system-ui, sans-serif";
+
+function ProgressRing({pct,size=44,stroke=3.5,color}){
+  const r=(size-stroke*2)/2,circ=2*Math.PI*r,offset=circ-(pct/100)*circ;
+  return(
+    <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1E2540" strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        style={{transition:"stroke-dashoffset 0.5s ease"}}/>
+    </svg>
+  );
+}
+
+function UrgentTicker({urgentItems}){
+  const[offset,setOffset]=useState(0);
+  const rafRef=useRef(null),prevTs=useRef(null),contentRef=useRef(null);
+  const[halfW,setHalfW]=useState(0);
+  const count=urgentItems.length;
+  useEffect(()=>{if(contentRef.current)setHalfW(contentRef.current.scrollWidth/2);});
+  useEffect(()=>{
+    const tick=(ts)=>{
+      if(prevTs.current!==null)setOffset(p=>halfW>0?(p+50*(ts-prevTs.current)/1000)%halfW:0);
+      prevTs.current=ts;rafRef.current=requestAnimationFrame(tick);
+    };
+    rafRef.current=requestAnimationFrame(tick);
+    return()=>{cancelAnimationFrame(rafRef.current);prevTs.current=null;};
+  },[halfW]);
+
+  const chipColor=(item)=>{
+    const d=daysUntil(item.dueDate);
+    return d<0?"#EF4444":d===0?"#EF4444":"#F59E0B";
+  };
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,zIndex:999,height:40,background:"#0F1220",borderBottom:"1px solid #1E2540",overflow:"hidden",display:"flex",alignItems:"center"}}>
+      {/* Left fade */}
+      <div style={{position:"absolute",left:0,top:0,bottom:0,width:32,background:"linear-gradient(to right,#0F1220,transparent)",zIndex:1,pointerEvents:"none"}}/>
+      {/* Right fade */}
+      <div style={{position:"absolute",right:0,top:0,bottom:0,width:32,background:"linear-gradient(to left,#0F1220,transparent)",zIndex:1,pointerEvents:"none"}}/>
+
+      <div ref={contentRef} style={{display:"flex",alignItems:"center",gap:0,transform:`translateX(-${offset}px)`,whiteSpace:"nowrap",willChange:"transform",paddingLeft:8}}>
+        {[0,1].map(rep=>(
+          <span key={rep} style={{display:"inline-flex",alignItems:"center",gap:0}}>
+            {urgentItems.map((item,idx)=>{
+              const d=daysUntil(item.dueDate);
+              const lbl=d<0?`${Math.abs(d)}d overdue`:d===0?"today":"tomorrow";
+              const col=chipColor(item);
+              return(
+                <span key={idx} style={{display:"inline-flex",alignItems:"center",gap:8,margin:"0 10px"}}>
+                  {/* Colored dot */}
+                  <span style={{width:6,height:6,borderRadius:"50%",background:col,flexShrink:0,boxShadow:`0 0 6px ${col}`}}/>
+                  {/* Task name */}
+                  <span style={{fontSize:12,fontWeight:700,color:"#E2E8F0",fontFamily:ff}}>{item.title}</span>
+                  {/* Due pill */}
+                  <span style={{fontSize:10,fontWeight:700,color:col,background:`${col}22`,border:`1px solid ${col}55`,padding:"1px 8px",borderRadius:20,letterSpacing:"0.03em"}}>{lbl}</span>
+                  {/* Counter */}
+                  <span style={{fontSize:10,color:"#334155",fontFamily:ff}}>{idx+1}/{count}</span>
+                  {/* Separator */}
+                  {idx<urgentItems.length-1&&<span style={{color:"#1E2540",margin:"0 4px",fontSize:14}}>|</span>}
+                </span>
+              );
+            })}
+            {/* End marker */}
+            <span style={{display:"inline-flex",alignItems:"center",gap:6,margin:"0 16px",padding:"0 14px",borderLeft:"1px solid #1E2540",color:"#334155",fontSize:10,letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:700}}>
+              {count} urgent
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SwipeBack({onBack,children}){
+  const sx=useRef(null),sy=useRef(null);
+  return(
+    <div
+      onTouchStart={e=>{sx.current=e.touches[0].clientX;sy.current=e.touches[0].clientY;}}
+      onTouchEnd={e=>{
+        if(!sx.current)return;
+        const dx=e.changedTouches[0].clientX-sx.current,dy=Math.abs(e.changedTouches[0].clientY-sy.current);
+        if(dx>60&&dy<80)onBack();sx.current=null;
+      }}
+      style={{minHeight:"100vh"}}
+    >{children}</div>
+  );
+}
+
+function BackBtn({label,onClick}){
+  return(
+    <button onClick={onClick} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:C.muted,fontFamily:ff,fontWeight:600,padding:"8px 0"}}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 4L6 8l4 4" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      {label}
+    </button>
+  );
+}
+
+function Field({label,value,color,preWrap}){
+  if(!value&&value!==0)return null;
+  return(
+    <div style={{marginBottom:14}}>
+      <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>{label}</p>
+      <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"13px 16px",fontSize:15,color:color||C.subtle,lineHeight:1.7,whiteSpace:preWrap?"pre-wrap":"normal",wordBreak:"break-word"}}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function App(){
+  const[items,setItems]=useState(SAMPLE_ITEMS);
+  const[view,setView]=useState("home");
+  const[activeTab,setActiveTab]=useState("work");
+  const[activeSubcat,setActiveSubcat]=useState("All");
+  const[filter,setFilter]=useState("Active");
+  const[selectedItem,setSelectedItem]=useState(null);
+  const[formTitle,setFormTitle]=useState("");
+  const[formNote,setFormNote]=useState("");
+  const[formCat,setFormCat]=useState("work");
+  const[formSubcat,setFormSubcat]=useState("General");
+  const[formDue,setFormDue]=useState("");
+  const[subcats,setSubcats]=useState(DEFAULT_SUBCATS);
+  const[showManageSubcats,setShowManageSubcats]=useState(false);
+  const[manageCat,setManageCat]=useState("work");
+  const[newSubcatInput,setNewSubcatInput]=useState("");
+  const[editSubcatIdx,setEditSubcatIdx]=useState(null);
+  const[editSubcatVal,setEditSubcatVal]=useState("");
+  const holdTimer=useRef(null),isHolding=useRef(false);
+  const swipeX=useRef(null),swipeY=useRef(null),pillSwipeX=useRef(null);
+
+  const urgentItems=items.filter(i=>!i.done&&i.dueDate&&daysUntil(i.dueDate)<=2);
+  const catItems=(cat)=>items.filter(i=>i.category===cat);
+  const catActive=(cat)=>catItems(cat).filter(i=>!i.done).length;
+  const catDone=(cat)=>catItems(cat).filter(i=>i.done).length;
+  const catPct=(cat)=>{const t=catItems(cat).length;return t?Math.round((catDone(cat)/t)*100):0;};
+  const totalActive=items.filter(i=>!i.done).length;
+  const totalDone=items.filter(i=>i.done).length;
+  const totalPct=items.length?Math.round((totalDone/items.length)*100):0;
+  const visibleItems=items.filter(i=>{
+    if(i.category!==activeTab)return false;
+    if(activeSubcat!=="All"&&i.subcat!==activeSubcat)return false;
+    if(filter==="Active")return!i.done;
+    if(filter==="Done")return i.done;
+    return true;
+  });
+
+  const openDetail=(item)=>{setSelectedItem(item);setView("detail");};
+  const openAdd=()=>{setFormTitle("");setFormNote("");setFormCat(activeTab);setFormSubcat(activeSubcat!=="All"?activeSubcat:"General");setFormDue("");setView("add");};
+  const openEdit=(item)=>{setSelectedItem(item);setFormTitle(item.title);setFormNote(item.note||"");setFormCat(item.category);setFormSubcat(item.subcat||"General");setFormDue(item.dueDate||"");setView("edit");};
+  const goHome=()=>{setView("home");setSelectedItem(null);};
+
+  const toggle=(id,e)=>{
+    e&&e.stopPropagation();
+    const updated=items.map(i=>i.id===id?{...i,done:!i.done}:i);
+    setItems(updated);
+    if(selectedItem?.id===id)setSelectedItem(updated.find(i=>i.id===id));
+  };
+  const deleteItem=(id)=>{setItems(items.filter(i=>i.id!==id));goHome();};
+  const submitForm=()=>{
+    if(!formTitle.trim())return;
+    if(view==="edit"&&selectedItem){
+      const updated=items.map(i=>i.id===selectedItem.id?{...i,title:formTitle.trim(),note:formNote.trim(),category:formCat,subcat:formSubcat,dueDate:formDue}:i);
+      setItems(updated);setSelectedItem(updated.find(i=>i.id===selectedItem.id));setView("detail");
+    }else{
+      setItems([{id:Date.now(),title:formTitle.trim(),note:formNote.trim(),done:false,created:TODAY_STR,category:formCat,subcat:formSubcat,dueDate:formDue},...items]);
+      setActiveTab(formCat);setActiveSubcat(formSubcat);setView("home");
+    }
+  };
+  const startHold=(item)=>{isHolding.current=false;holdTimer.current=setTimeout(()=>{isHolding.current=true;openDetail(item);},450);};
+  const cancelHold=()=>clearTimeout(holdTimer.current);
+  const onTabSwipeStart=(e)=>{swipeX.current=e.touches[0].clientX;swipeY.current=e.touches[0].clientY;};
+  const onTabSwipeEnd=(e)=>{
+    if(!swipeX.current)return;
+    const dx=e.changedTouches[0].clientX-swipeX.current,dy=Math.abs(e.changedTouches[0].clientY-swipeY.current);
+    if(Math.abs(dx)>50&&dy<80){
+      const idx=TAB_KEYS.indexOf(activeTab);
+      if(dx<0&&idx<TAB_KEYS.length-1){setActiveTab(TAB_KEYS[idx+1]);setActiveSubcat("All");}
+      if(dx>0&&idx>0){setActiveTab(TAB_KEYS[idx-1]);setActiveSubcat("All");}
+    }
+    swipeX.current=null;
+  };
+
+  const doBackup=()=>{
+    const data=JSON.stringify({items,subcats},null,2);
+    const blob=new Blob([data],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=`tasks-backup-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();URL.revokeObjectURL(url);
+  };
+  const doRestore=(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const parsed=JSON.parse(ev.target.result);
+        if(parsed.items)setItems(parsed.items);
+        if(parsed.subcats)setSubcats(parsed.subcats);
+        setShowManageSubcats(false);
+        alert("✅ Restored successfully!");
+      }catch{alert("❌ Invalid backup file.");}
+    };
+    reader.readAsText(file);e.target.value="";
+  };
+
+  // ── DETAIL ────────────────────────────────────────────────────
+  if(view==="detail"&&selectedItem){
+    const live=items.find(i=>i.id===selectedItem.id)||selectedItem;
+    const cat=CATS[live.category];
+    const status=dueStatus(live);
+    const badge=status?dueBadge(status):null;
+    return(
+      <SwipeBack onBack={goHome}>
+        <div style={{minHeight:"100vh",background:C.bg,fontFamily:ff,padding:"36px 20px 60px"}}>
+          <div style={{maxWidth:480,margin:"0 auto"}}>
+            <BackBtn label="Back" onClick={goHome}/>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,margin:"20px 0 20px"}}>
+              <h1 style={{margin:0,fontSize:26,fontWeight:800,letterSpacing:"-0.4px",lineHeight:1.25,color:live.done?C.muted:C.text,textDecoration:live.done?"line-through":"none",flex:1}}>
+                {live.title}
+              </h1>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0,paddingTop:4}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:live.done?"rgba(16,185,129,0.12)":"rgba(245,158,11,0.12)",color:live.done?C.green:C.amber}}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:live.done?C.green:C.amber,display:"inline-block"}}/>
+                  {live.done?"Done":"Active"}
+                </span>
+                <span style={{fontSize:10,color:C.muted,fontWeight:500}}>{live.created}</span>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,marginBottom:14}}>
+              <div style={{flex:1,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"11px 14px"}}>
+                <p style={{margin:"0 0 4px",fontSize:9,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Category</p>
+                <span style={{display:"inline-flex",alignItems:"center",gap:5,color:cat.color,fontSize:14,fontWeight:600}}>
+                  {cat.icon} {cat.label}
+                  {live.subcat&&<span style={{padding:"1px 7px",borderRadius:20,background:cat.dim,border:`1px solid ${cat.color}33`,fontSize:11}}>{live.subcat}</span>}
+                </span>
+              </div>
+              {live.dueDate?(
+                <div style={{flex:1,background:badge?badge.bg:C.card,borderRadius:12,border:`1px solid ${badge?badge.border:C.border}`,padding:"11px 14px"}}>
+                  <p style={{margin:"0 0 4px",fontSize:9,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Due Date</p>
+                  <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                    <span style={{fontSize:14,fontWeight:600,color:badge?badge.text:C.text}}>{fmt(parseDue(live.dueDate))}</span>
+                    {status&&!live.done&&<span style={{fontSize:11,fontWeight:700,color:badge.text}}>{dueLabel(live.dueDate)}</span>}
+                  </div>
+                </div>
+              ):<div style={{flex:1}}/>}
+            </div>
+            {live.note?<Field label="Notes" value={live.note} preWrap/>:null}
+            <div style={{display:"flex",gap:10,marginTop:24}}>
+              <button onClick={()=>deleteItem(live.id)} style={{flex:1,padding:"13px 0",borderRadius:12,border:`1px solid rgba(239,68,68,0.3)`,background:"rgba(239,68,68,0.1)",cursor:"pointer",fontFamily:ff,fontSize:"13px",fontWeight:700,color:C.red,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10M5.5 3.5V2.5h3v1M4.5 3.5l.5 8h4l.5-8" stroke={C.red} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>Delete
+              </button>
+              <button onClick={()=>openEdit(live)} style={{flex:1,padding:"13px 0",borderRadius:12,border:"1px solid rgba(99,102,241,0.3)",background:"rgba(99,102,241,0.1)",cursor:"pointer",fontFamily:ff,fontSize:"13px",fontWeight:700,color:"#6366F1",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 1.5l3 3L4 13H1v-3L9.5 1.5z" stroke="#6366F1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>Edit
+              </button>
+              <button onClick={(e)=>toggle(live.id,e)} style={{flex:1.4,padding:"13px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:ff,fontSize:"13px",fontWeight:700,background:live.done?cat.grad:`linear-gradient(135deg,${C.green},#059669)`,color:"#FFF",display:"flex",alignItems:"center",justifyContent:"center",gap:5,boxShadow:live.done?`0 3px 12px ${cat.glow}`:"0 3px 12px rgba(16,185,129,0.3)"}}>
+                {live.done?"Active ↩":"Done ✓"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </SwipeBack>
+    );
+  }
+
+  // ── ADD / EDIT ────────────────────────────────────────────────
+  if(view==="add"||view==="edit"){
+    const isEdit=view==="edit";
+    const cat=CATS[formCat];
+    const onBack=isEdit?()=>setView("detail"):goHome;
+    const subcatList=subcats[formCat]||["General"];
+    return(
+      <SwipeBack onBack={onBack}>
+        <div style={{minHeight:"100vh",background:C.bg,fontFamily:ff,padding:"36px 20px 60px"}}>
+          <div style={{maxWidth:480,margin:"0 auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
+              <BackBtn label="Cancel" onClick={onBack}/>
+              {isEdit&&<button onClick={submitForm} disabled={!formTitle.trim()} style={{background:"none",border:"none",cursor:"pointer",fontFamily:ff,fontWeight:700,color:formTitle.trim()?cat.color:"#334155",padding:"8px 0"}}>Save</button>}
+            </div>
+            <h2 style={{margin:"0 0 20px",fontSize:26,fontWeight:800,color:C.text,letterSpacing:"-0.4px"}}>{isEdit?"Edit Task":"New Task"}</h2>
+            <div style={{marginBottom:14}}>
+              <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Title</p>
+              <input value={formTitle} onChange={e=>setFormTitle(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitForm()} placeholder="What needs to be done?" autoFocus
+                style={{width:"100%",padding:"13px 14px",fontWeight:600,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,color:C.text,outline:"none"}}
+                onFocus={e=>e.target.style.borderColor=cat.color} onBlur={e=>e.target.style.borderColor=C.border}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Category</p>
+              <div style={{display:"flex",gap:10}}>
+                {Object.entries(CATS).map(([key,c])=>{
+                  const on=formCat===key;
+                  return(<button key={key} onClick={()=>{setFormCat(key);setFormSubcat("General");}} style={{flex:1,padding:"12px",borderRadius:12,cursor:"pointer",fontFamily:ff,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:on?c.dim:"transparent",border:`1.5px solid ${on?c.color:C.border}`,color:on?c.color:C.muted}}>
+                    <span style={{color:on?c.color:C.muted}}>{c.icon}</span>{c.label}
+                  </button>);
+                })}
+              </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Subcategory</p>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {subcatList.map(s=>{
+                  const on=formSubcat===s;
+                  return(<button key={s} onClick={()=>setFormSubcat(s)} style={{padding:"7px 14px",borderRadius:20,cursor:"pointer",fontFamily:ff,fontWeight:600,fontSize:"13px",background:on?cat.dim:"transparent",border:`1px solid ${on?cat.color:C.border}`,color:on?cat.color:C.muted}}>
+                    {s}
+                  </button>);
+                })}
+              </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Due Date <span style={{textTransform:"none",fontWeight:400,letterSpacing:0,color:"#334155"}}>(optional)</span></p>
+              <input type="date" value={formDue} onChange={e=>setFormDue(e.target.value)} min={offsetDate(0)}
+                style={{width:"100%",padding:"13px 14px",background:C.card,border:`1px solid ${C.border}`,borderRadius:12,color:formDue?C.text:C.muted,outline:"none"}}
+                onFocus={e=>e.target.style.borderColor=cat.color} onBlur={e=>e.target.style.borderColor=C.border}/>
+              {formDue&&<button onClick={()=>setFormDue("")} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:12,fontFamily:ff,padding:"4px 0",marginTop:4}}>✕ Clear date</button>}
+            </div>
+            <div style={{marginBottom:20}}>
+              <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Notes <span style={{textTransform:"none",fontWeight:400,letterSpacing:0,color:"#334155"}}>(optional)</span></p>
+              <textarea value={formNote} onChange={e=>setFormNote(e.target.value)} rows={4} placeholder="Any details, context, or reminders…"
+                style={{width:"100%",padding:"13px 14px",background:C.card,border:`1px solid ${C.border}`,borderRadius:12,color:C.subtle,outline:"none",lineHeight:1.6}}
+                onFocus={e=>e.target.style.borderColor=cat.color} onBlur={e=>e.target.style.borderColor=C.border}/>
+            </div>
+            <button onClick={submitForm} disabled={!formTitle.trim()} style={{width:"100%",padding:"16px",borderRadius:12,border:"none",fontFamily:ff,fontWeight:700,cursor:formTitle.trim()?"pointer":"not-allowed",background:formTitle.trim()?cat.grad:C.border,color:"#FFF",boxShadow:formTitle.trim()?`0 6px 20px ${cat.glow}`:"none"}}>
+              {isEdit?"Save Changes":"Add Task"}
+            </button>
+          </div>
+        </div>
+      </SwipeBack>
+    );
+  }
+
+  // ── HOME ──────────────────────────────────────────────────────
+  const currentCat=CATS[activeTab];
+  const topPad=urgentItems.length>0?76:36;
+
+  return(
+    <div onTouchStart={onTabSwipeStart} onTouchEnd={onTabSwipeEnd} style={{minHeight:"100vh",background:C.bg,fontFamily:ff,paddingBottom:80}}>
+      {urgentItems.length>0&&<UrgentTicker urgentItems={urgentItems}/>}
+
+      <div style={{padding:`${topPad}px 20px 0`,maxWidth:480,margin:"0 auto"}}>
+        <p style={{margin:"0 0 4px",fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"0.12em",textTransform:"uppercase"}}>{TODAY_STR}</p>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <div>
+            <h1 style={{margin:0,fontSize:28,fontWeight:800,color:C.text,letterSpacing:"-0.5px"}}>My Tasks</h1>
+            <p style={{margin:"4px 0 0",fontSize:13,color:C.muted}}>{totalActive===0?"All caught up 🎉":`${totalActive} remaining · ${totalDone} done`}</p>
+          </div>
+          <div style={{position:"relative"}}>
+            <ProgressRing pct={totalPct} size={48} stroke={4} color={totalPct===100?C.green:"#6366F1"}/>
+            <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:10,fontWeight:800,color:totalPct===100?C.green:"#A5B4FC"}}>{totalPct}%</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:10,marginBottom:14}}>
+          {TAB_KEYS.map(key=>{
+            const cat=CATS[key],on=activeTab===key,pct=catPct(key);
+            const catUrgent=urgentItems.filter(i=>i.category===key).length;
+            return(
+              <button key={key} onClick={()=>{setActiveTab(key);setActiveSubcat("All");}} style={{flex:1,padding:"14px 14px 12px",borderRadius:16,cursor:"pointer",fontFamily:ff,background:on?C.cardHover:C.card,border:`1.5px solid ${on?cat.color+"66":C.border}`,textAlign:"left",position:"relative",overflow:"hidden",boxShadow:on?`0 4px 18px rgba(0,0,0,0.3)`:"none",transition:"all 0.18s"}}>
+                <div style={{position:"absolute",top:0,left:0,right:0,height:2.5,background:on?cat.grad:C.border,borderRadius:"16px 16px 0 0"}}/>
+                {catUrgent>0&&<div style={{position:"absolute",top:10,right:10,width:8,height:8,borderRadius:"50%",background:C.red,boxShadow:`0 0 6px ${C.red}`}}/>}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,color:on?cat.color:C.muted}}>{cat.icon}<span style={{fontSize:13,fontWeight:700,color:on?cat.color:C.muted}}>{cat.label}</span></div>
+                  <div style={{position:"relative"}}>
+                    <ProgressRing pct={pct} size={32} stroke={3} color={on?cat.color:C.muted}/>
+                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:800,color:on?cat.color:C.muted}}>{pct}%</span></div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:12}}>
+                  <div><div style={{fontSize:18,fontWeight:800,color:on?cat.color:C.muted,lineHeight:1}}>{catActive(key)}</div><div style={{fontSize:9,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:2}}>Active</div></div>
+                  <div><div style={{fontSize:18,fontWeight:800,color:C.green,lineHeight:1}}>{catDone(key)}</div><div style={{fontSize:9,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:2}}>Done</div></div>
+                </div>
+                <div style={{marginTop:10,height:3,background:"#1E2540",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:cat.grad,borderRadius:3,transition:"width 0.6s"}}/>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Subcategory</span>
+            <button onClick={()=>{setManageCat(activeTab);setShowManageSubcats(true);setNewSubcatInput("");setEditSubcatIdx(null);}} style={{padding:"2px 7px",borderRadius:8,cursor:"pointer",background:"transparent",border:`1px solid ${C.border}`,color:C.muted,fontSize:"10px",fontFamily:ff}}>⚙️</button>
+          </div>
+          <div
+            style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:4,WebkitOverflowScrolling:"touch"}}
+            onTouchStart={e=>{e.stopPropagation();pillSwipeX.current=e.touches[0].clientX;}}
+            onTouchMove={e=>e.stopPropagation()}
+            onTouchEnd={e=>{
+              e.stopPropagation();
+              if(pillSwipeX.current===null)return;
+              const dx=e.changedTouches[0].clientX-pillSwipeX.current;
+              if(Math.abs(dx)>40){
+                const allSubs=["All",...(subcats[activeTab]||[])];
+                const idx=allSubs.indexOf(activeSubcat);
+                if(dx<0&&idx<allSubs.length-1)setActiveSubcat(allSubs[idx+1]);
+                if(dx>0&&idx>0)setActiveSubcat(allSubs[idx-1]);
+              }
+              pillSwipeX.current=null;
+            }}
+          >
+            {["All",...(subcats[activeTab]||[])].map(s=>{
+              const on=activeSubcat===s;
+              return(<button key={s} onClick={()=>setActiveSubcat(s)} style={{padding:"3px 9px",borderRadius:20,cursor:"pointer",fontFamily:ff,fontWeight:600,fontSize:"9px",flexShrink:0,background:on?currentCat.dim:"transparent",border:`1px solid ${on?currentCat.color:C.border}`,color:on?currentCat.color:C.muted,transition:"all 0.15s",whiteSpace:"nowrap"}}>
+                {s}
+              </button>);
+            })}
+          </div>
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div style={{display:"flex",gap:6}}>
+            {[{key:"Active",color:currentCat.color},{key:"Done",color:C.green},{key:"All",color:C.subtle}].map(({key,color})=>{
+              const on=filter===key;
+              return<button key={key} onClick={()=>setFilter(key)} style={{padding:"7px 14px",fontSize:"13px",fontWeight:600,fontFamily:ff,border:`1px solid ${on?color:C.border}`,borderRadius:8,cursor:"pointer",background:on?`${color}1A`:"transparent",color:on?color:C.muted}}>{key}</button>;
+            })}
+          </div>
+          <button onClick={openAdd} style={{display:"flex",alignItems:"center",gap:6,padding:"9px 16px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:ff,fontSize:"14px",fontWeight:700,background:currentCat.grad,color:"#FFF",boxShadow:`0 4px 14px ${currentCat.glow}`}}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="#FFF" strokeWidth="2.2" strokeLinecap="round"/></svg>Add
+          </button>
+        </div>
+
+        <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>
+          {TAB_KEYS.map(k=>(
+            <div key={k} onClick={()=>{setActiveTab(k);setActiveSubcat("All");}} style={{width:activeTab===k?20:6,height:6,borderRadius:3,background:activeTab===k?currentCat.color:C.border,transition:"all 0.25s",cursor:"pointer"}}/>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:"0 20px",maxWidth:480,margin:"0 auto"}}>
+        {visibleItems.length===0?(
+          <div style={{padding:"48px 24px",textAlign:"center",background:C.card,borderRadius:16,border:`1px solid ${C.border}`,color:C.muted,fontSize:14}}>
+            {filter==="Active"?"No active tasks — tap Add!":filter==="Done"?"Nothing completed yet.":"No tasks yet."}
+          </div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {visibleItems.map(item=>{
+              const cat=CATS[item.category],status=dueStatus(item),badge=status?dueBadge(status):null;
+              return(
+                <div key={item.id}
+                  onMouseDown={()=>startHold(item)} onMouseUp={cancelHold} onMouseLeave={cancelHold}
+                  onTouchStart={()=>startHold(item)} onTouchEnd={cancelHold} onTouchMove={cancelHold}
+                  onClick={()=>{if(!isHolding.current)openDetail(item);}}
+                  style={{background:C.card,borderRadius:14,cursor:"pointer",border:`1px solid transparent`,transition:"all 0.15s ease",overflow:"hidden"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=C.cardHover;e.currentTarget.style.borderColor=cat.color+"33";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=C.card;e.currentTarget.style.borderColor="transparent";cancelHold();}}
+                >
+                  {status&&status!=="ok"&&!item.done&&<div style={{height:2.5,background:status==="soon"?C.amber:C.red}}/>}
+                  <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px"}}>
+                    <button onClick={e=>{e.stopPropagation();toggle(item.id,e);}} style={{width:26,height:26,borderRadius:8,flexShrink:0,border:"none",background:item.done?C.green:"transparent",outline:item.done?"none":`2px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {item.done&&<svg width="12" height="10" viewBox="0 0 11 9" fill="none"><path d="M1 4.5L4 7.5L10 1.5" stroke="#FFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:15,fontWeight:600,color:item.done?C.muted:C.text,textDecoration:item.done?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:3}}>{item.title}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        {item.subcat&&item.subcat!=="General"&&<span style={{fontSize:9,fontWeight:600,color:cat.color,background:cat.dim,padding:"1px 6px",borderRadius:20,letterSpacing:"0.03em"}}>{item.subcat}</span>}
+                        <span style={{fontSize:11,color:C.muted}}>{item.created}</span>
+                        {item.dueDate&&!item.done&&badge&&<span style={{fontSize:11,fontWeight:700,color:badge.text,background:badge.bg,border:`1px solid ${badge.border}`,padding:"1px 8px",borderRadius:20}}>{dueLabel(item.dueDate)}</span>}
+                      </div>
+                    </div>
+                    <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
+                      {!item.done&&<div style={{width:7,height:7,borderRadius:"50%",background:status&&status!=="ok"?(status==="soon"?C.amber:C.red):cat.color,boxShadow:`0 0 7px ${status&&status!=="ok"?(status==="soon"?C.amber:C.red):cat.color}`}}/>}
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{opacity:0.3}}><path d="M5 3l4 4-4 4" stroke={C.text} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Settings modal */}
+      {showManageSubcats&&(()=>{
+        const mcat=CATS[manageCat];
+        const list=subcats[manageCat]||[];
+        const addSubcat=()=>{
+          const val=newSubcatInput.trim();
+          if(!val||list.includes(val))return;
+          setSubcats(prev=>({...prev,[manageCat]:[...prev[manageCat],val]}));
+          setNewSubcatInput("");
+        };
+        const deleteSubcat=(s)=>{
+          setSubcats(prev=>({...prev,[manageCat]:prev[manageCat].filter(x=>x!==s)}));
+          setItems(prev=>prev.map(i=>i.category===manageCat&&i.subcat===s?{...i,subcat:"General"}:i));
+          if(activeSubcat===s)setActiveSubcat("All");
+        };
+        const saveEdit=(idx)=>{
+          const val=editSubcatVal.trim();if(!val)return;
+          const old=list[idx];
+          setSubcats(prev=>{const next=[...prev[manageCat]];next[idx]=val;return{...prev,[manageCat]:next};});
+          setItems(prev=>prev.map(i=>i.category===manageCat&&i.subcat===old?{...i,subcat:val}:i));
+          if(activeSubcat===old)setActiveSubcat(val);
+          setEditSubcatIdx(null);setEditSubcatVal("");
+        };
+        return(
+          <div onClick={()=>setShowManageSubcats(false)} style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:520,border:`1px solid ${C.border}`,borderBottom:"none",padding:"24px 20px 40px",maxHeight:"80vh",overflowY:"auto"}}>
+              <div style={{width:40,height:4,background:C.border,borderRadius:2,margin:"0 auto 20px"}}/>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+                <h2 style={{margin:0,fontSize:20,fontWeight:800,color:C.text}}>Settings</h2>
+                <button onClick={()=>setShowManageSubcats(false)} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:20,padding:"4px 6px"}}>✕</button>
+              </div>
+              <div style={{marginBottom:10}}>
+                <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Subcategories</p>
+              </div>
+              <div style={{display:"flex",gap:8,marginBottom:20}}>
+                {TAB_KEYS.map(k=>{
+                  const c=CATS[k];const on=manageCat===k;
+                  return(<button key={k} onClick={()=>{setManageCat(k);setEditSubcatIdx(null);setNewSubcatInput("");}} style={{flex:1,padding:"10px",borderRadius:10,cursor:"pointer",fontFamily:ff,fontWeight:700,fontSize:"13px",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:on?c.dim:"transparent",border:`1.5px solid ${on?c.color:C.border}`,color:on?c.color:C.muted}}>
+                    <span style={{color:on?c.color:C.muted}}>{c.icon}</span>{c.label}
+                  </button>);
+                })}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:18}}>
+                {list.map((s,idx)=>(
+                  <div key={s} style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"10px 14px",border:`1px solid ${C.border}`}}>
+                    {editSubcatIdx===idx?(
+                      <>
+                        <input value={editSubcatVal} onChange={e=>setEditSubcatVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveEdit(idx)} autoFocus
+                          style={{flex:1,padding:"6px 10px",fontSize:"15px",background:C.card,border:`1px solid ${mcat.color}`,borderRadius:8,color:C.text,outline:"none",fontFamily:ff}}/>
+                        <button onClick={()=>saveEdit(idx)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:mcat.grad,color:"#FFF",fontFamily:ff,fontWeight:700,fontSize:"13px",cursor:"pointer"}}>Save</button>
+                        <button onClick={()=>setEditSubcatIdx(null)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,fontFamily:ff,fontSize:"13px",cursor:"pointer"}}>✕</button>
+                      </>
+                    ):(
+                      <>
+                        <span style={{flex:1,fontSize:15,fontWeight:500,color:C.text}}>{s}</span>
+                        <button onClick={()=>{setEditSubcatIdx(idx);setEditSubcatVal(s);}} style={{padding:"5px 10px",borderRadius:8,border:`1px solid rgba(99,102,241,0.3)`,background:"rgba(99,102,241,0.1)",color:"#6366F1",fontFamily:ff,fontSize:"12px",fontWeight:600,cursor:"pointer"}}>Edit</button>
+                        {s!=="General"&&<button onClick={()=>deleteSubcat(s)} style={{padding:"5px 10px",borderRadius:8,border:`1px solid rgba(239,68,68,0.25)`,background:"rgba(239,68,68,0.08)",color:C.red,fontFamily:ff,fontSize:"12px",fontWeight:600,cursor:"pointer"}}>Delete</button>}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={newSubcatInput} onChange={e=>setNewSubcatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addSubcat()} placeholder="New subcategory name…"
+                  style={{flex:1,padding:"12px 14px",fontSize:"16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,color:C.text,outline:"none",fontFamily:ff}}
+                  onFocus={e=>e.target.style.borderColor=mcat.color} onBlur={e=>e.target.style.borderColor=C.border}/>
+                <button onClick={addSubcat} disabled={!newSubcatInput.trim()} style={{padding:"12px 18px",borderRadius:12,border:"none",background:newSubcatInput.trim()?mcat.grad:C.border,color:"#FFF",fontFamily:ff,fontWeight:700,fontSize:"14px",cursor:newSubcatInput.trim()?"pointer":"not-allowed"}}>Add</button>
+              </div>
+              <div style={{marginTop:20,paddingTop:16,borderTop:`1px solid ${C.border}`}}>
+                <p style={{margin:"0 0 10px",fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Data</p>
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={doBackup} style={{flex:1,padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",fontFamily:ff,fontSize:"13px",fontWeight:600,color:C.subtle,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke={C.subtle} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>Backup
+                  </button>
+                  <label style={{flex:1,padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",fontFamily:ff,fontSize:"13px",fontWeight:600,color:C.subtle,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 13V5M4 8l3-3 3 3M2 3H1V1h12v2h-1" stroke={C.subtle} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>Restore
+                    <input type="file" accept=".json" onChange={doRestore} style={{display:"none"}}/>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

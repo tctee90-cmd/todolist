@@ -98,8 +98,8 @@ const CATS={
   work:{
     label:"Work",
     icon:<svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.7"/><path d="M6 6V5a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>,
-    color:"#f04860",dim:"rgba(240,72,96,0.15)",glow:"rgba(240,72,96,0.3)",
-    grad:"linear-gradient(135deg,#f04860,#ff6b81)",
+    color:"#6366f1",dim:"rgba(99,102,241,0.15)",glow:"rgba(99,102,241,0.3)",
+    grad:"linear-gradient(135deg,#4f46e5,#818cf8)",
   },
   personal:{
     label:"Personal",
@@ -154,6 +154,65 @@ function ProgressRing({pct,size=44,stroke=3.5,color}){
   );
 }
 
+function LeaveReminderBanner({unsubmittedLeave,stacked}){
+  const[offset,setOffset]=useState(0);
+  const rafRef=useRef(null),prevTs=useRef(null),contentRef=useRef(null);
+  const[halfW,setHalfW]=useState(0);
+  const count=unsubmittedLeave.length;
+
+  useEffect(()=>{if(contentRef.current)setHalfW(contentRef.current.scrollWidth/2);});
+  useEffect(()=>{
+    const tick=(ts)=>{
+      if(prevTs.current!==null)setOffset(p=>halfW>0?(p+40*(ts-prevTs.current)/1000)%halfW:0);
+      prevTs.current=ts;rafRef.current=requestAnimationFrame(tick);
+    };
+    rafRef.current=requestAnimationFrame(tick);
+    return()=>{cancelAnimationFrame(rafRef.current);prevTs.current=null;};
+  },[halfW]);
+
+  if(count===0)return null;
+
+  return(
+    <div style={{
+      position:"fixed",bottom:stacked?120:88,left:0,right:0,zIndex:996,
+      height:32,
+      background:"#2a1414",
+      borderTop:"1px solid rgba(239,68,68,0.2)",
+      overflow:"hidden",display:"flex",alignItems:"center",
+    }}>
+      {/* Left fade */}
+      <div style={{position:"absolute",left:0,top:0,bottom:0,width:24,background:"linear-gradient(to right,#2a1414,transparent)",zIndex:1,pointerEvents:"none"}}/>
+      {/* Right fade */}
+      <div style={{position:"absolute",right:0,top:0,bottom:0,width:24,background:"linear-gradient(to left,#2a1414,transparent)",zIndex:1,pointerEvents:"none"}}/>
+
+      <div ref={contentRef} style={{display:"flex",alignItems:"center",transform:`translateX(-${offset}px)`,whiteSpace:"nowrap",willChange:"transform"}}>
+        {[0,1].map(rep=>(
+          <span key={rep} style={{display:"inline-flex",alignItems:"center"}}>
+            {unsubmittedLeave.map((log,idx)=>(
+              <span key={log.id} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"0 20px"}}>
+                {/* Dot */}
+                <span style={{width:5,height:5,borderRadius:"50%",background:"#F87171",flexShrink:0,boxShadow:"0 0 5px #F87171"}}/>
+                {/* Label */}
+                <span style={{fontSize:11,fontWeight:500,color:"rgba(255,255,255,0.85)",fontFamily:ff,letterSpacing:"0.01em"}}>{log.label}</span>
+                {/* Date */}
+                <span style={{fontSize:10,fontWeight:600,color:"#F87171",fontFamily:ff}}>{log.date}</span>
+                {/* Divider */}
+                {idx<unsubmittedLeave.length-1&&<span style={{width:1,height:10,background:"rgba(255,255,255,0.1)",display:"inline-block",marginLeft:8}}/>}
+              </span>
+            ))}
+            {/* Loop separator */}
+            <span style={{padding:"0 20px",display:"inline-flex",alignItems:"center",gap:8}}>
+              <span style={{width:1,height:10,background:"rgba(255,255,255,0.1)",display:"inline-block"}}/>
+              <span style={{fontSize:9,color:"rgba(255,255,255,0.3)",fontWeight:600,letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:ff}}>{count} not submitted</span>
+              <span style={{width:1,height:10,background:"rgba(255,255,255,0.1)",display:"inline-block"}}/>
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function UrgentTicker({urgentItems}){
   const[offset,setOffset]=useState(0);
   const rafRef=useRef(null),prevTs=useRef(null),contentRef=useRef(null);
@@ -172,16 +231,16 @@ function UrgentTicker({urgentItems}){
 
   return(
     <div style={{
-      position:"fixed",top:0,left:0,right:0,zIndex:999,
+      position:"fixed",bottom:88,left:0,right:0,zIndex:997,
       height:32,
-      background:"#111827",
-      borderBottom:"1px solid rgba(255,255,255,0.06)",
+      background:"#2a1414",
+      borderTop:"1px solid rgba(239,68,68,0.2)",
       overflow:"hidden",display:"flex",alignItems:"center",
     }}>
       {/* Left fade */}
-      <div style={{position:"absolute",left:0,top:0,bottom:0,width:24,background:"linear-gradient(to right,#111827,transparent)",zIndex:1,pointerEvents:"none"}}/>
+      <div style={{position:"absolute",left:0,top:0,bottom:0,width:24,background:"linear-gradient(to right,#2a1414,transparent)",zIndex:1,pointerEvents:"none"}}/>
       {/* Right fade */}
-      <div style={{position:"absolute",right:0,top:0,bottom:0,width:24,background:"linear-gradient(to left,#111827,transparent)",zIndex:1,pointerEvents:"none"}}/>
+      <div style={{position:"absolute",right:0,top:0,bottom:0,width:24,background:"linear-gradient(to left,#2a1414,transparent)",zIndex:1,pointerEvents:"none"}}/>
 
       <div ref={contentRef} style={{display:"flex",alignItems:"center",transform:`translateX(-${offset}px)`,whiteSpace:"nowrap",willChange:"transform"}}>
         {[0,1].map(rep=>(
@@ -264,7 +323,7 @@ const LEAVE_TYPES_DEFAULT = [
 
 const LEAVE_COLORS = ["#00c896","#10B981","#F59E0B","#A78BFA","#F472B6","#EF4444","#34D399","#FB923C"];
 
-function LeaveTracker(){
+function LeaveTracker({onLogsChanged}){
   const ff2 = ff;
   const[now,setNow]=useState(new Date());
   useEffect(()=>{
@@ -283,6 +342,7 @@ function LeaveTracker(){
   const[logDate,setLogDate]=useState(new Date().toISOString().split("T")[0]);
   const[logDateTo,setLogDateTo]=useState("");
   const[logReason,setLogReason]=useState("");
+  const[logSubmitted,setLogSubmitted]=useState(false);
   const[editModal,setEditModal]=useState(null);
   const[addModal,setAddModal]=useState(false);
   const[newLabel,setNewLabel]=useState("");
@@ -299,6 +359,7 @@ function LeaveTracker(){
     setLogDate(new Date().toISOString().split("T")[0]);
     setLogDateTo("");
     setLogReason("");
+    setLogSubmitted(false);
   };
 
   const confirmLog=()=>{
@@ -315,15 +376,23 @@ function LeaveTracker(){
       dateTo:logDateTo||"",
       reason:logReason.trim(),
       week:weekLabel,
+      submitted:logSubmitted,
     };
     setLogs(p=>[newLog,...p]);
     setLeaves(p=>p.map(l=>l.id===logModal.id?{...l,used:parseFloat((l.used+amt).toFixed(2))}:l));
     setLogModal(null);
+    onLogsChanged?.();
   };
 
   const deleteLog=(logId,leaveId,amt)=>{
     setLogs(p=>p.filter(l=>l.id!==logId));
     setLeaves(p=>p.map(l=>l.id===leaveId?{...l,used:Math.max(0,parseFloat((l.used-amt).toFixed(2)))}:l));
+    onLogsChanged?.();
+  };
+
+  const toggleSubmitted=(logId)=>{
+    setLogs(p=>p.map(l=>l.id===logId?{...l,submitted:!l.submitted}:l));
+    onLogsChanged?.();
   };
 
   const addType=()=>{
@@ -519,13 +588,17 @@ function LeaveTracker(){
                           <span style={{fontSize:14,fontWeight:700,color:G.text}}>{l.label}</span>
                           <span style={{fontSize:16,fontWeight:800,color:l.color}}>−{l.amt} {l.unit}</span>
                         </div>
-                        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",marginBottom:l.reason?4:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",marginBottom:l.reason?4:6}}>
                           {l.week&&<span style={{fontSize:10,fontWeight:700,color:l.color,background:`${l.color}15`,padding:"2px 7px",borderRadius:20}}>{l.week}</span>}
                           <span style={{fontSize:11,color:G.muted}}>
                             {l.date}{l.dateTo&&l.dateTo!==l.date?` → ${l.dateTo}`:""}
                           </span>
                         </div>
-                        {l.reason&&<div style={{fontSize:12,color:G.muted,fontStyle:"italic"}}>"{l.reason}"</div>}
+                        {l.reason&&<div style={{fontSize:12,color:G.muted,fontStyle:"italic",marginBottom:6}}>"{l.reason}"</div>}
+                        <button onClick={()=>toggleSubmitted(l.id)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:20,border:`1px solid ${l.submitted?"#00c89655":"#EF444455"}`,background:l.submitted?"rgba(0,200,150,0.1)":"rgba(239,68,68,0.1)",cursor:"pointer",fontFamily:ff2}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",background:l.submitted?"#00c896":"#EF4444",flexShrink:0}}/>
+                          <span style={{fontSize:10,fontWeight:700,color:l.submitted?"#00c896":"#EF4444"}}>{l.submitted?"Submitted":"Not submitted"}</span>
+                        </button>
                       </div>
                       <button onClick={()=>deleteLog(l.id,l.leaveId,l.amt)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(239,68,68,0.35)",fontSize:18,padding:"0 2px",flexShrink:0,marginTop:2}}>×</button>
                     </div>
@@ -584,10 +657,21 @@ function LeaveTracker(){
             </div>
 
             {/* Reason */}
-            <div style={{marginBottom:20}}>
+            <div style={{marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:G.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Reason <span style={{textTransform:"none",fontWeight:400,color:"#334155"}}>(optional)</span></p>
               <input value={logReason} onChange={e=>setLogReason(e.target.value)} placeholder="e.g. Family trip to Bali, Medical appointment…"
                 style={{width:"100%",padding:"11px 14px",fontSize:"16px",background:G.bg,border:`1px solid ${G.border}`,borderRadius:10,color:G.text,outline:"none",fontFamily:ff2}}/>
+            </div>
+
+            {/* Submitted toggle */}
+            <div style={{marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,background:G.bg,border:`1px solid ${G.border}`}}>
+              <div>
+                <p style={{margin:0,fontSize:13,fontWeight:700,color:G.text}}>Leave submitted?</p>
+                <p style={{margin:"2px 0 0",fontSize:11,color:G.muted}}>{logSubmitted?"Marked as submitted":"You'll get a reminder until submitted"}</p>
+              </div>
+              <button onClick={()=>setLogSubmitted(s=>!s)} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:logSubmitted?"#00c896":"rgba(255,255,255,.15)",position:"relative",transition:"background .2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:2,left:logSubmitted?22:2,width:22,height:22,borderRadius:"50%",background:"#FFF",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.4)"}}/>
+              </button>
             </div>
 
             <button onClick={confirmLog} disabled={!logAmt||!logDate} style={{width:"100%",padding:"15px",borderRadius:12,border:"none",fontFamily:ff2,fontSize:"15px",fontWeight:700,cursor:logAmt&&logDate?"pointer":"not-allowed",background:logAmt&&logDate?`linear-gradient(135deg,${logModal.color},rgba(255,255,255,0.7))`:G.border,color:"#FFF"}}>
@@ -664,6 +748,21 @@ function App(){
   const[now,setNow]=useState(new Date());
   useEffect(()=>{
     const t=setInterval(()=>setNow(new Date()),1000);
+    return()=>clearInterval(t);
+  },[]);
+
+  // Track unsubmitted leave logs for the reminder banner — re-read whenever the page changes
+  // (e.g. after returning from the Leave tab where a new log may have been added)
+  const[unsubmittedLeave,setUnsubmittedLeave]=useState([]);
+  const refreshUnsubmittedLeave=()=>{
+    try{
+      const logs=JSON.parse(localStorage.getItem("mytasks_leave_logs")||"[]");
+      setUnsubmittedLeave(Array.isArray(logs)?logs.filter(l=>!l.submitted):[]);
+    }catch{setUnsubmittedLeave([]);}
+  };
+  useEffect(()=>{
+    refreshUnsubmittedLeave();
+    const t=setInterval(refreshUnsubmittedLeave,2000);
     return()=>clearInterval(t);
   },[]);
 
@@ -1000,7 +1099,7 @@ function App(){
 
   // ── HOME ──────────────────────────────────────────────────────
   const currentCat=CATS[activeTab];
-  const topPad=urgentItems.length>0?32:0;
+  const hasUrgentBanner=urgentItems.length>0;
   const overdueCount=items.filter(i=>!i.done&&i.dueDate&&daysUntil(i.dueDate)<0).length;
   const dueTodayCount=items.filter(i=>!i.done&&i.dueDate&&daysUntil(i.dueDate)===0).length;
   const doneToday=items.filter(i=>i.done).length;
@@ -1105,15 +1204,16 @@ function App(){
   if(mainPage==="leave") return(
     <div>
       {expenseLayer}
-      <LeaveTracker/>
+      <LeaveTracker onLogsChanged={refreshUnsubmittedLeave}/>
       <BottomNav/>
+      <LeaveReminderBanner unsubmittedLeave={unsubmittedLeave}/>
     </div>
   );
 
   if(mainPage==="expense") return expenseLayer;
 
   return(
-    <div onTouchStart={onTabSwipeStart} onTouchEnd={onTabSwipeEnd} style={{minHeight:"100vh",background:C.bg,fontFamily:ff,paddingBottom:100}}>
+    <div onTouchStart={onTabSwipeStart} onTouchEnd={onTabSwipeEnd} style={{minHeight:"100vh",background:C.bg,fontFamily:ff,paddingBottom:hasUrgentBanner?140:100}}>
       {expenseLayer}
       {urgentItems.length>0&&<UrgentTicker urgentItems={urgentItems}/>}
 
@@ -1123,13 +1223,12 @@ function App(){
         background:"linear-gradient(180deg, #0a1a22 0%, #0c1820 40%, #080e14 100%)",
         borderBottom:`1px solid rgba(0,200,150,.18)`,
         boxShadow:"0 0 0 1px rgba(0,0,0,.3), 0 14px 40px rgba(0,0,0,.4)",
-        padding:`${topPad>0?topPad+8:0}px 0 0`,
         marginBottom:0,
         position:"relative",
       }}>
         {/* Top shimmer line */}
         <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg, transparent 5%, rgba(0,200,150,.6) 30%, rgba(56,182,232,.9) 55%, rgba(0,200,150,.6) 75%, transparent 95%)"}}/>
-        <div style={{maxWidth:480,margin:"0 auto",padding:"22px 16px 12px"}}>
+        <div style={{maxWidth:480,margin:"0 auto",padding:"22px 16px 6px"}}>
           {/* Title row — exact Expense Tracker .header layout: title+date left, time+month right */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
             <div>
@@ -1145,57 +1244,55 @@ function App(){
             </div>
           </div>
 
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <p style={{margin:0,fontSize:13,color:C.muted}}>
-              {totalActive===0?"All caught up today 🎉":`You have ${totalActive} task${totalActive>1?"s":""} to do`}
-            </p>
-            {/* Overall ring */}
-            <div style={{position:"relative",flexShrink:0,width:40,height:40}}>
-              <ProgressRing pct={totalPct} size={40} stroke={4} color={totalPct===100?C.green:"#00c896"}/>
-              <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1}}>
-                <span style={{fontSize:10,fontWeight:800,color:totalPct===100?C.green:"#6ce8c4",lineHeight:1,textAlign:"center"}}>{totalPct}%</span>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <p style={{margin:"0 0 6px",fontSize:13,color:C.muted}}>
+                {totalActive===0?"All caught up today 🎉":`You have ${totalActive} task${totalActive>1?"s":""} to do`}
+              </p>
+              {/* Quick stat chips */}
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {[
+                  {label:"Active",val:totalActive,color:"#00c896",bg:"rgba(0,200,150,0.1)",border:"rgba(0,200,150,0.25)"},
+                  {label:"Done",val:totalDone,color:C.green,bg:"rgba(16,185,129,0.1)",border:"rgba(16,185,129,0.25)"},
+                  ...(overdueCount>0?[{label:"Overdue",val:overdueCount,color:C.red,bg:"rgba(239,68,68,0.1)",border:"rgba(239,68,68,0.25)"}]:[]),
+                  ...(dueTodayCount>0?[{label:"Due today",val:dueTodayCount,color:C.amber,bg:"rgba(245,158,11,0.1)",border:"rgba(245,158,11,0.25)"}]:[]),
+                ].map(s=>(
+                  <div key={s.label} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:s.bg,border:`1px solid ${s.border}`}}>
+                    <span style={{fontSize:13,fontWeight:800,color:s.color}}>{s.val}</span>
+                    <span style={{fontSize:10,fontWeight:500,color:s.color,opacity:0.8}}>{s.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
-
-          {/* Quick stat chips */}
-          <div style={{display:"flex",gap:8}}>
-            {[
-              {label:"Active",val:totalActive,color:"#00c896",bg:"rgba(0,200,150,0.1)",border:"rgba(0,200,150,0.25)"},
-              {label:"Done",val:totalDone,color:C.green,bg:"rgba(16,185,129,0.1)",border:"rgba(16,185,129,0.25)"},
-              ...(overdueCount>0?[{label:"Overdue",val:overdueCount,color:C.red,bg:"rgba(239,68,68,0.1)",border:"rgba(239,68,68,0.25)"}]:[]),
-              ...(dueTodayCount>0?[{label:"Due today",val:dueTodayCount,color:C.amber,bg:"rgba(245,158,11,0.1)",border:"rgba(245,158,11,0.25)"}]:[]),
-            ].map(s=>(
-              <div key={s.label} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:s.bg,border:`1px solid ${s.border}`}}>
-                <span style={{fontSize:13,fontWeight:800,color:s.color}}>{s.val}</span>
-                <span style={{fontSize:10,fontWeight:500,color:s.color,opacity:0.8}}>{s.label}</span>
+            {/* Overall ring */}
+            <div style={{position:"relative",flexShrink:0,width:64,height:64}}>
+              <ProgressRing pct={totalPct} size={64} stroke={6} color={totalPct===100?C.green:"#00c896"}/>
+              <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1}}>
+                <span style={{fontSize:16,fontWeight:800,color:totalPct===100?C.green:"#6ce8c4",lineHeight:1,textAlign:"center"}}>{totalPct}%</span>
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{padding:"12px 20px 0",maxWidth:480,margin:"0 auto"}}>
+      <div style={{padding:"6px 20px 0",maxWidth:480,margin:"0 auto"}}>
         <div style={{display:"flex",gap:10,marginBottom:10}}>
           {TAB_KEYS.map(key=>{
             const cat=CATS[key],on=activeTab===key,pct=catPct(key);
             const catUrgent=urgentItems.filter(i=>i.category===key).length;
             return(
-              <button key={key} onClick={()=>{setActiveTab(key);setActiveSubcat("All");}} style={{flex:1,padding:"14px 14px 12px",borderRadius:16,cursor:"pointer",fontFamily:ff,background:on?C.cardHover:C.card,border:`1.5px solid ${on?cat.color+"66":C.border}`,textAlign:"left",position:"relative",overflow:"hidden",boxShadow:on?`0 4px 18px rgba(0,0,0,0.3)`:"none",transition:"all 0.18s"}}>
-                <div style={{position:"absolute",top:0,left:0,right:0,height:2.5,background:on?cat.grad:C.border,borderRadius:"16px 16px 0 0"}}/>
-                {catUrgent>0&&<div style={{position:"absolute",top:10,right:10,width:8,height:8,borderRadius:"50%",background:C.red,boxShadow:`0 0 6px ${C.red}`}}/>}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <button key={key} onClick={()=>{setActiveTab(key);setActiveSubcat("All");}} style={{flex:1,padding:"12px 12px 10px",borderRadius:14,cursor:"pointer",fontFamily:ff,background:on?C.cardHover:C.card,border:`1.5px solid ${on?cat.color+"66":C.border}`,textAlign:"left",position:"relative",overflow:"hidden",boxShadow:on?`0 4px 18px rgba(0,0,0,0.3)`:"none",transition:"all 0.18s"}}>
+                <div style={{position:"absolute",top:0,left:0,right:0,height:2.5,background:on?cat.grad:C.border,borderRadius:"14px 14px 0 0"}}/>
+                {catUrgent>0&&<div style={{position:"absolute",top:9,right:9,width:8,height:8,borderRadius:"50%",background:C.red,boxShadow:`0 0 6px ${C.red}`}}/>}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:7,color:on?cat.color:C.muted}}>{cat.icon}<span style={{fontSize:13,fontWeight:700,color:on?cat.color:C.muted}}>{cat.label}</span></div>
-                  <div style={{position:"relative"}}>
-                    <ProgressRing pct={pct} size={32} stroke={3} color={on?cat.color:C.muted}/>
-                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:8,fontWeight:800,color:on?cat.color:C.muted}}>{pct}%</span></div>
-                  </div>
+                  <span style={{fontSize:12,fontWeight:800,color:on?cat.color:C.muted}}>{pct}%</span>
                 </div>
                 <div style={{display:"flex",gap:12}}>
                   <div><div style={{fontSize:18,fontWeight:800,color:on?cat.color:C.muted,lineHeight:1}}>{catActive(key)}</div><div style={{fontSize:9,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:2}}>Active</div></div>
                   <div><div style={{fontSize:18,fontWeight:800,color:C.green,lineHeight:1}}>{catDone(key)}</div><div style={{fontSize:9,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:2}}>Done</div></div>
                 </div>
-                <div style={{marginTop:10,height:3,background:"rgba(255,255,255,.08)",borderRadius:3,overflow:"hidden"}}>
+                <div style={{marginTop:8,height:3,background:"rgba(255,255,255,.08)",borderRadius:3,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${pct}%`,background:cat.grad,borderRadius:3,transition:"width 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)"}}/>
                 </div>
               </button>

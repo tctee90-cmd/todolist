@@ -154,7 +154,7 @@ function ProgressRing({pct,size=44,stroke=3.5,color}){
   );
 }
 
-function LeaveReminderBanner({unsubmittedLeave,stacked}){
+function LeaveReminderBanner({unsubmittedLeave,stacked,onTap}){
   const[offset,setOffset]=useState(0);
   const rafRef=useRef(null),prevTs=useRef(null),contentRef=useRef(null);
   const[halfW,setHalfW]=useState(0);
@@ -173,12 +173,13 @@ function LeaveReminderBanner({unsubmittedLeave,stacked}){
   if(count===0)return null;
 
   return(
-    <div style={{
+    <div onClick={onTap} style={{
       position:"fixed",bottom:stacked?120:88,left:0,right:0,zIndex:996,
       height:32,
       background:"#2a1414",
       borderTop:"1px solid rgba(239,68,68,0.2)",
       overflow:"hidden",display:"flex",alignItems:"center",
+      cursor:onTap?"pointer":"default",
     }}>
       {/* Left fade */}
       <div style={{position:"absolute",left:0,top:0,bottom:0,width:24,background:"linear-gradient(to right,#2a1414,transparent)",zIndex:1,pointerEvents:"none"}}/>
@@ -203,7 +204,7 @@ function LeaveReminderBanner({unsubmittedLeave,stacked}){
             {/* Loop separator */}
             <span style={{padding:"0 20px",display:"inline-flex",alignItems:"center",gap:8}}>
               <span style={{width:1,height:10,background:"rgba(255,255,255,0.1)",display:"inline-block"}}/>
-              <span style={{fontSize:9,color:"rgba(255,255,255,0.3)",fontWeight:600,letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:ff}}>{count} not submitted</span>
+              <span style={{fontSize:9,color:"rgba(255,255,255,0.3)",fontWeight:600,letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:ff}}>{count} not submitted · tap to update</span>
               <span style={{width:1,height:10,background:"rgba(255,255,255,0.1)",display:"inline-block"}}/>
             </span>
           </span>
@@ -317,6 +318,7 @@ const LEAVE_TYPES_DEFAULT = [
   { id:"annual", label:"Annual Leave", total:38, used:22, unit:"days", color:"#00c896" },
   { id:"sick",   label:"Sick Leave",   total:14, used:8,  unit:"days", color:"#10B981" },
   { id:"ccl",    label:"CCL",          total:1,  used:0,  unit:"days", color:"#A78BFA" },
+  { id:"birthday",label:"Birthday Leave", total:1, used:0, unit:"days", color:"#FBBF24" },
   { id:"phil",   label:"PHIL",         total:1,  used:0,  unit:"days", color:"#F472B6" },
   { id:"timeoff",label:"Time Off",     total:0,  used:26.25, unit:"hours", color:"#F59E0B" },
 ];
@@ -330,7 +332,7 @@ const LEAVE_COLORS = [
   "#94A3B8","#CBD5E1","#cd7f4f","#14B8A6", // neutrals/bronze/teal
 ];
 
-function LeaveTracker({onLogsChanged}){
+function LeaveTracker({onLogsChanged,initialTab}){
   const ff2 = ff;
   const[now,setNow]=useState(new Date());
   useEffect(()=>{
@@ -342,10 +344,14 @@ function LeaveTracker({onLogsChanged}){
       const s=localStorage.getItem("mytasks_leaves");
       if(!s)return LEAVE_TYPES_DEFAULT;
       const saved=JSON.parse(s);
-      // One-time migration: re-sort existing saved leave types to match the
-      // canonical default order (Annual, Sick, CCL, Time Off, PHIL, then any custom types appended).
+      // One-time migration: inject any new built-in leave type the user doesn't have yet
+      // (e.g. Birthday Leave added later), then re-sort to match the canonical default order
+      // (Annual, Sick, CCL, Birthday, PHIL, Time Off, then any custom types appended).
+      const savedIds=new Set(saved.map(l=>l.id));
+      const missing=LEAVE_TYPES_DEFAULT.filter(d=>!savedIds.has(d.id));
+      const merged=[...saved,...missing];
       const order=LEAVE_TYPES_DEFAULT.map(d=>d.id);
-      const sorted=[...saved].sort((a,b)=>{
+      const sorted=[...merged].sort((a,b)=>{
         const ai=order.indexOf(a.id),bi=order.indexOf(b.id);
         if(ai===-1&&bi===-1)return 0;
         if(ai===-1)return 1;
@@ -358,7 +364,7 @@ function LeaveTracker({onLogsChanged}){
   const[logs,setLogsRaw]=useState(()=>{
     try{const s=localStorage.getItem("mytasks_leave_logs");return s?JSON.parse(s):[];}catch{return[];}
   });
-  const[leaveTab,setLeaveTab]=useState("balance"); // balance | calendar | history
+  const[leaveTab,setLeaveTab]=useState(initialTab||"balance"); // balance | calendar | history
   const[logModal,setLogModal]=useState(null);
   const[logType,setLogType]=useState("use"); // "use" | "topup"
   const[logAmt,setLogAmt]=useState("");
@@ -366,6 +372,7 @@ function LeaveTracker({onLogsChanged}){
   const[logDateTo,setLogDateTo]=useState("");
   const[logReason,setLogReason]=useState("");
   const[logSubmitted,setLogSubmitted]=useState(false);
+  const[logEditModal,setLogEditModal]=useState(null); // the log entry currently being edited (or null)
   const[editModal,setEditModal]=useState(null);
   const[addModal,setAddModal]=useState(false);
   const[newLabel,setNewLabel]=useState("");
@@ -379,11 +386,11 @@ function LeaveTracker({onLogsChanged}){
   const openLog=(l,type)=>{
     setLogModal(l);
     setLogType(type||"use");
-    const defaultTopUpAmt={annual:"28",sick:"14",ccl:"3"};
+    const defaultTopUpAmt={annual:"28",sick:"14",ccl:"3",birthday:"1"};
     setLogAmt(type==="topup"&&defaultTopUpAmt[l.id]?defaultTopUpAmt[l.id]:"");
     setLogDate(new Date().toISOString().split("T")[0]);
     setLogDateTo("");
-    const autoFillIds=["annual","sick","ccl"];
+    const autoFillIds=["annual","sick","ccl","birthday"];
     setLogReason(type==="topup"&&autoFillIds.includes(l.id)?"New year allocation":"");
     setLogSubmitted(false);
   };
@@ -427,6 +434,28 @@ function LeaveTracker({onLogsChanged}){
 
   const toggleSubmitted=(logId)=>{
     setLogs(p=>p.map(l=>l.id===logId?{...l,submitted:!l.submitted}:l));
+    onLogsChanged?.();
+  };
+
+  const saveLogEdit=(original,edited)=>{
+    const newAmt=parseFloat(edited.amt)||0;
+    const oldAmt=original.amt;
+    const delta=newAmt-oldAmt; // positive = increase, negative = decrease
+    setLeaves(p=>p.map(l=>{
+      if(l.id!==original.leaveId)return l;
+      if(original.type==="topup"){
+        return{...l,total:Math.max(0,parseFloat((l.total+delta).toFixed(2)))};
+      }
+      return{...l,used:Math.max(0,parseFloat((l.used+delta).toFixed(2)))};
+    }));
+    setLogs(p=>p.map(l=>l.id===original.id?{
+      ...l,
+      amt:newAmt,
+      date:edited.date,
+      dateTo:edited.dateTo||"",
+      reason:edited.reason.trim(),
+    }:l));
+    setLogEditModal(null);
     onLogsChanged?.();
   };
 
@@ -621,7 +650,10 @@ function LeaveTracker({onLogsChanged}){
                           </button>
                         )}
                       </div>
-                      <button onClick={()=>deleteLog(l.id,l.leaveId,l.amt,l.type)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(239,68,68,0.35)",fontSize:18,padding:"0 2px",flexShrink:0,marginTop:2}}>×</button>
+                      <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,marginTop:2}}>
+                        <button onClick={()=>setLogEditModal({...l})} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:13,padding:"0 2px"}}>✎</button>
+                        <button onClick={()=>deleteLog(l.id,l.leaveId,l.amt,l.type)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(239,68,68,0.35)",fontSize:18,padding:"0 2px"}}>×</button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -672,7 +704,7 @@ function LeaveTracker({onLogsChanged}){
             <div style={{marginBottom:14}}>
               <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:G.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>{logType==="topup"?"Days to add":"Amount"} ({logModal.unit})</p>
               <div style={{display:"flex",gap:6,marginBottom:8}}>
-                {(logType==="topup"?(["ccl","phil","timeoff"].includes(logModal.id)?[1,2,3,5,7,10]:[14,21,28,30,38,42]):[0.5,1,2,3,4,5]).map(n=>(
+                {(logType==="topup"?(["ccl","phil","timeoff","birthday"].includes(logModal.id)?[1,2,3,5,7,10]:[14,21,28,30,38,42]):[0.5,1,2,3,4,5]).map(n=>(
                   <button key={n} onClick={()=>setLogAmt(String(n))} style={{flex:1,padding:"9px 0",borderRadius:9,border:`1px solid ${logAmt==n?(logType==="topup"?"#00c896":logModal.color):G.border}`,background:logAmt==n?`${logType==="topup"?"#00c896":logModal.color}20`:"transparent",color:logAmt==n?(logType==="topup"?"#00c896":logModal.color):G.muted,fontFamily:ff2,fontWeight:700,fontSize:"12px",cursor:"pointer"}}>{n}</button>
                 ))}
               </div>
@@ -693,6 +725,7 @@ function LeaveTracker({onLogsChanged}){
                     :logModal.id==="ccl"?"e.g. Nanny take leave…"
                     :logModal.id==="phil"?"e.g. Used it to replace AL (London trip)…"
                     :logModal.id==="timeoff"?"e.g. Daughter school event…"
+                    :logModal.id==="birthday"?"e.g. My birthday celebration…"
                     :"e.g. Reason for this leave…")
               }
                 style={{width:"100%",padding:"11px 14px",fontSize:"16px",background:G.bg,border:`1px solid ${G.border}`,borderRadius:10,color:G.text,outline:"none",fontFamily:ff2}}/>
@@ -746,6 +779,53 @@ function LeaveTracker({onLogsChanged}){
         </div>
       )}
 
+      {/* ── EDIT LOG ENTRY MODAL ── */}
+      {logEditModal&&(
+        <div onClick={()=>setLogEditModal(null)} style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:G.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:520,border:`1px solid ${G.border}`,borderBottom:"none",padding:"24px 20px 40px"}}>
+            <div style={{width:40,height:4,background:G.border,borderRadius:2,margin:"0 auto 20px"}}/>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:logEditModal.type==="topup"?"#00c896":logEditModal.color,flexShrink:0}}/>
+              <h3 style={{margin:0,fontSize:18,fontWeight:800,color:G.text}}>Edit {logEditModal.type==="topup"?"Top Up":"Log"} — {logEditModal.label}</h3>
+            </div>
+            <p style={{margin:"0 0 20px",fontSize:12,color:G.muted}}>Changing the amount will automatically adjust this leave's balance.</p>
+
+            <div style={{display:"flex",gap:10,marginBottom:14}}>
+              <div style={{flex:1}}>
+                <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:G.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>From</p>
+                <input type="date" value={logEditModal.date} onChange={e=>setLogEditModal(p=>({...p,date:e.target.value}))}
+                  style={{width:"100%",padding:"11px 10px",fontSize:"15px",background:G.bg,border:`1px solid ${G.border}`,borderRadius:10,color:G.text,outline:"none",fontFamily:ff2}}/>
+              </div>
+              <div style={{flex:1}}>
+                <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:G.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>To (optional)</p>
+                <input type="date" value={logEditModal.dateTo||""} onChange={e=>setLogEditModal(p=>({...p,dateTo:e.target.value}))}
+                  style={{width:"100%",padding:"11px 10px",fontSize:"15px",background:G.bg,border:`1px solid ${G.border}`,borderRadius:10,color:G.text,outline:"none",fontFamily:ff2}}/>
+              </div>
+            </div>
+
+            <div style={{marginBottom:14}}>
+              <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:G.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Amount ({logEditModal.unit})</p>
+              <input type="number" step="0.5" min="0" value={logEditModal.amt} onChange={e=>setLogEditModal(p=>({...p,amt:e.target.value}))}
+                style={{width:"100%",padding:"11px 14px",fontSize:"16px",background:G.bg,border:`1px solid ${G.border}`,borderRadius:10,color:G.text,outline:"none",fontFamily:ff2}}/>
+            </div>
+
+            <div style={{marginBottom:20}}>
+              <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,color:G.muted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Remark <span style={{textTransform:"none",fontWeight:400,color:"#334155"}}>(optional)</span></p>
+              <input value={logEditModal.reason||""} onChange={e=>setLogEditModal(p=>({...p,reason:e.target.value}))} placeholder="Add a remark…"
+                style={{width:"100%",padding:"11px 14px",fontSize:"16px",background:G.bg,border:`1px solid ${G.border}`,borderRadius:10,color:G.text,outline:"none",fontFamily:ff2}}/>
+            </div>
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setLogEditModal(null)} style={{flex:1,padding:"14px",borderRadius:12,border:`1px solid ${G.border}`,fontFamily:ff2,fontSize:"14px",fontWeight:700,cursor:"pointer",background:"transparent",color:G.muted}}>Cancel</button>
+              <button onClick={()=>{
+                const original=logs.find(l=>l.id===logEditModal.id);
+                if(original)saveLogEdit(original,logEditModal);
+              }} style={{flex:2,padding:"14px",borderRadius:12,border:"none",fontFamily:ff2,fontSize:"15px",fontWeight:700,cursor:"pointer",background:`linear-gradient(135deg,${logEditModal.type==="topup"?"#00c896":logEditModal.color},rgba(255,255,255,0.7))`,color:"#FFF"}}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── ADD TYPE MODAL ── */}
       {addModal&&(
         <div onClick={()=>setAddModal(false)} style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
@@ -791,6 +871,7 @@ function App(){
   // Track unsubmitted leave logs for the reminder banner — re-read whenever the page changes
   // (e.g. after returning from the Leave tab where a new log may have been added)
   const[unsubmittedLeave,setUnsubmittedLeave]=useState([]);
+  const[jumpToLeaveHistory,setJumpToLeaveHistory]=useState(0); // incrementing key forces LeaveTracker remount on History
   const refreshUnsubmittedLeave=()=>{
     try{
       const logs=JSON.parse(localStorage.getItem("mytasks_leave_logs")||"[]");
@@ -1241,9 +1322,9 @@ function App(){
   if(mainPage==="leave") return(
     <div>
       {expenseLayer}
-      <LeaveTracker onLogsChanged={refreshUnsubmittedLeave}/>
+      <LeaveTracker key={jumpToLeaveHistory} onLogsChanged={refreshUnsubmittedLeave} initialTab={jumpToLeaveHistory>0?"history":"balance"}/>
       <BottomNav/>
-      <LeaveReminderBanner unsubmittedLeave={unsubmittedLeave}/>
+      <LeaveReminderBanner unsubmittedLeave={unsubmittedLeave} onTap={()=>setJumpToLeaveHistory(n=>n+1)}/>
     </div>
   );
 
